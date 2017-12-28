@@ -1,5 +1,5 @@
-# AI Market (Web) - First AI Marketplace Powered by Blockchain
-The code is in develop branch. This code is AI Market web project which displays web pages and front end logics. AI Market server project is [here](https://github.com/ATNIO/aimarket_server).
+# AI Market (Server) - First AI Marketplace Powered by Blockchain
+The code is in develop branch. This code is AI Market server project which provides GraphQL/REST endpoint and WEBSocket endpoint for AI Market web. AI Market web project is [here](https://github.com/ATNIO/aimarket_web).
 
 ## Getting Started
 The following instructions overview the process of getting the code, building it, running in localhost.
@@ -15,151 +15,250 @@ brew install node
 Clone project
 
 ```
-git clone git@github.com:ATMatrix/aimarket_web.git
+git clone git@github.com:ATNIO/aimarket_server.git
 ```
 
 Install dependencies
 ```
-npm install
+npm i
 ```
 
-### Building
+### Building 
 ```
-npm run build:dll
+npm run build
 ```
 
 ### Running
 ```
 npm run start
-```
+``` 
 
-Open [http://localhost:8000](http://localhost:8000)
+Open [http://localhost:4000/tokentest](http://localhost:4000/tokentest)
 
 ## Framework
 
-Using [dva](https://github.com/dvajs/dva) as our front-end framework,  based on redux, redux-saga and react-router.
+Using [Express](http://expressjs.com) as our web framework, 🌍 [GraphQL](http://graphql.org) server for Express based on [apollo-server](https://www.apollographql.com),use [SOCKET.IO](https://socket.io) as WebSocket, use [mysqljs/mysql](https://github.com/mysqljs/mysql) as database dao. 
 
 ### Data Flow
-<img src="https://zos.alipayobjects.com/rmsportal/PPrerEAKbIoDZYr.png" width="807" />
+<img src="https://demo.atn.io/static/aimarket_server.jpg" width="807" />
 
-Using models to maintain state data, including:
+Using three important components, including:
 
-* Subscription
-* Effect
-* Reducer
+* Express
+* GQL Schema
+* Database DAO
 
-Users start a action by dispatch, Effect receive it and start a new action using yield put, then Reducer receive and modify data, pages will change according to state.
+## Express
 
+### REST endpoint
 
+#### [Express:Router](http://expressjs.com/zh-cn/4x/api.html#Router)
 
-## Models
+A router object is an isolated instance of middleware and routes. You can think of it as a “mini-application,” capable only of performing middleware and routing functions. Every Express application has a built-in app router.
 
-### State
+A router behaves like middleware itself, so you can use it as an argument to app.use() or as the argument to another router’s use() method.
 
-`type State = any`
+The top-level express object has a Router() method that creates a new router object.
 
-The state tree of your models. Usually, the state is a javascript object(Technically it can be any type), which is a immutable data.
+Once you’ve created a router object, you can add middleware and HTTP method routes (such as get, put, post, and so on) to it just like an application. For example:
 
-In dva, you can access top state tree data by `_store`.
-
-```javascript
-const app = dva();
-console.log(app._store); // top state
-```
-
-### Action
-
-`type AsyncAction = any`
-
-Just like Redux's Action, in dva, action is a plain object that represents an intention to change the state. Actions are the only way to get data into the store. Any data, whether from UI events, network callbacks, or other sources such as WebSockets needs to eventually be dispatched as actions.action.(ps:dispatch is realized through props by connecting components.)
+***dbot_router*.js** :
 
 ```javascript
-dispatch({
-  type: 'add',
+var express = require('express');
+var dbotRouter = express.Router();
+
+// middleware that is specific to this router
+dbotRouter.use(function timeLog(req, res, next) {
+  console.log('Time: ', Date.now());
+  next();
 });
-```
 
-### dispatch function
-
-`type dispatch = (a: Action) => Action`
-
-A dispatching function (or simply dispatch function) is a function that accepts an action or an async action; it then may or may not dispatch one or more actions to the store.
-
-Dispatching function is a function for triggering action, action is the only way to change state, but it just describes an action. while dispatch can be regarded as a way to trigger this action, and Reducer is to describe how to change state.
-
-```javascript
-dispatch({
-  type: 'user/add', // if in model outside, need to add namespace
-  payload: {},
+dbotRouter.get('/', function (req, res, next) {
+  res.send('Birds home page');
 });
+
+export {dbotRouter};
 ```
+You can then use a router for a particular root URL in this way separating your routes into files or even mini-apps.
 
-### Reducer
+***server*.js** :
 
-`type Reducer<S, A> = (state: S, action: A) => S`
+`app.use('/dbot', dbotRouter);`
 
-Just like Redux's Reducer, a reducer (also called a reducing function) is a function that accepts an accumulation and a value and returns a new accumulation. They are used to reduce a collection of values down to a single value.
 
-Reducer's concepts from FP:
+### GraphQL endpoint
+
+***server*.js** :
 
 ```javascript
-[{x:1},{y:2},{z:3}].reduce(function(prev, next){
-    return Object.assign(prev, next);
-})
-//return {x:1, y:2, z:3}
+app.use('/graphql', cors(corsOptions), bodyParser.json(), graphqlExpress({schema: schema}));
 ```
 
-In dva, reducers accumulate current model's state. There are some things need to be notice that reducer must be [pure function](https://github.com/MostlyAdequate/mostly-adequate-guide/blob/master/ch3.md) and every calculated data must be [immutable data](https://github.com/MostlyAdequate/mostly-adequate-guide/blob/master/ch3.md#reasonable).
+### WebSocket endpoint
 
-### Effect
-
-In dva, we use [redux-sagas](https://redux-saga.js.org/) to control asynchronous flow.
-You can learn more in [Mostly adequate guide to FP](https://github.com/MostlyAdequate/mostly-adequate-guide).
-
-In our applications, the most well-known side effect is asynchronous operation, it comes from the conception of functional programing, it is called side effect because it makes our function impure, and the same input may not result in the same output.
-
-### Subscription
-
-Subscriptions is a way to get data from source, it is come from elm.
-
-Data source can be: the current time, the websocket connection of server, keyboard input, geolocation change, history router change, etc..
+***server*.js** :
 
 ```javascript
-import key from 'keymaster';
-...
-app.model({
-  namespace: 'count',
-  subscriptions: {
-    keyEvent(dispatch) {
-      key('⌘+up, ctrl+up', () => { dispatch({type:'add'}) });
-    },
+//socket.io
+var server = require('http').createServer(app);
+const webServer = server.listen(4000, () => {
+    console.log('Running a GraphQL API server at localhost:4000/graphql');
+});
+
+const ss = require('./socketServer');
+ss.socketServer(webServer);
+```
+
+## GQL Schema
+
+### [GraphQL:Schemas and Types](http://graphql.org/learn/schema/#type-system)
+
+The most basic components of a GraphQL schema are object types, which just represent a kind of object you can fetch from your service, and what fields it has. In the GraphQL schema language, we might represent it like this:
+
+***typeDefs*.js** :
+
+```javascript
+export const typeDefs = `
+
+type PageInfo {
+    endCursor: Int!
+    hasNextPage: Boolean!
+}
+
+#Message
+type Message {
+    type: String!
+    code: String!
+    content: String!
+}
+
+input User {
+    username:String!
+    email:String!
+    password:String!
+}
+
+type Query {
+    getToken(id:ID!): Message!
+    addUser(user:User!): Message!
+    callAI(params:String!): Message!
+}
+
+schema {
+  query: Query
+}
+
+`;
+```
+
+### [GraphQL:Root fields & resolvers](http://graphql.org/learn/execution/#root-fields-resolvers)
+
+At the top level of every GraphQL server is a type that represents all of the possible entry points into the GraphQL API, it's often called the Root type or the Query type.
+
+***resolvers*.js** :
+
+```javascript
+import {getToken} from './getToken';
+import {loginUser} from './user/loginUser';
+import {addUser} from './user/addUser';
+import {callAI} from './ai/callAI';
+
+export const resolvers = {
+  Query: {
+    getToken,
+    loginUser,
+    addUser,
+    callAI
   }
-});
+};
 ```
 
-## Router
-
-Hereby router usually means frontend router. Because our current app is single page app, frontend codes are required to control the router logics. Through History API provided by the browser, we can monitor the change of the browser's url, so as to control the router.
-
-dva provide `router` function to control router, based on [react-router](https://github.com/reactjs/react-router)。
+***getToken*.js** use ES7 async function:
 
 ```javascript
-import { Router, Route } from 'dva/router';
-app.router(({history}) =>
-  <Router history={history}>
-    <Route path="/" component={HomePage} />
-  </Router>
-);
+import {Token,Message} from '../objects';
+
+export async function getToken() {
+    let token = require('crypto').randomBytes(10).toString('hex');
+    let message = new Message();
+    message.type = "info";
+    message.code = "00001";
+    message.content = "this is a message test";
+    console.log("token_test");
+    console.log(token);
+    return message;
+}
 ```
 
-## Route Components
+***ps* :** Resolvers are also used by REST endpoints and WebSocket endpoints.
 
-In dva, we restrict container components to route components, because we use page dimension to design container components.
+## Database Dao
 
-therefore, almost all connected model components are route components, route components in `/routes/` directory, presentational Components in `/components/` directory.
+### Business Dao
+
+Business Dao is the base unit cotains functions which to excute SQL statement on database. before using a business Dao you need to register it on business dispatcher. For example:
+
+1. business dispatcher
+
+***userDao*.js** :
+
+```javascript
+import {addUser} from './addUser'
+import {loginUser} from './loginUser'
+
+//function Dao register
+let dao = {};
+dao.addUser=addUser;
+dao.loginUser=loginUser;
+```
+
+2. base dispatcher
+ 
+***baseDao*.js** :
+
+```javascript
+import {userDao} from './userDao/userDao';
+import {aiDao} from './aiDao/aiDao';
+
+//business dispatcher register
+var dao = {};
+dao.userDao = userDao;
+dao.aiDao = aiDao;
+```
+
+***addUser*.js** :
+
+```javascript
+//DB
+import {pool} from '../../util/database';
+
+//addUser
+export function addUser(module, method, params) {
+    if (params.user !== undefined) {
+        let username = params.user.username;
+        let email = params.user.email;
+        let password = params.user.password;
+        let SQL = `INSERT INTO t_user(USER_NAME,USER_EMAIL,USER_PASSWORD) VALUES (?,?,?)`;
+        let bindVars = [username, email, password];
+        //promise
+        return new Promise((resolve, reject) => {
+            pool.query(SQL, bindVars, (error, results, fields) => {
+                if (error) {
+                    throw error;
+                }
+                resolve(postInterceptor(results));
+            });
+        });
+    } else {
+        throw 'params.user Undefined!Check it!';
+    }
+}
+```
 
 ## References
-- [redux docs](http://redux.js.org/docs/Glossary.html)
-- [Mostly adequate guide to FP](https://github.com/MostlyAdequate/mostly-adequate-guide)
-- [choo docs](https://github.com/yoshuawuyts/choo)
-- [elm](http://elm-lang.org/blog/farewell-to-frp)
+- [Express](http://expressjs.com)
+- 🌍[GraphQL](http://graphql.org)
+- [apollo-server](https://www.apollographql.com)
+- [SOCKET.IO](https://socket.io)
+- [mysqljs/mysql](https://github.com/mysqljs/mysql)
